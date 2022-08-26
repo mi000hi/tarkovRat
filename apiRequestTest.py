@@ -26,7 +26,7 @@ water_query = """
 query_all_items_prices = """
 {
     items {
-        name
+        shortName
         id
         width
         height
