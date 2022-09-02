@@ -307,14 +307,13 @@ def add_price_labels():
         traders = {0:'prapor', 1:'therapist', 2:'fence', 3:'skier', 4:'peacekeeper', 5:'mechanic', 6:'ragman', 7:'jaeger'}
         price_flea = all_items_df.loc[index, 'fleaMarket']
         price_traders = all_items_df.loc[index, 'prapor':'jaeger']
-        price_traders_max = max(price_traders)
-        best_trader = traders.get(np.argmax(price_traders))
-        price_max = max(price_flea, price_traders_max)
+        price_traders_max = np.nanmax(price_traders)
+        best_trader = traders.get(np.nanargmax(price_traders))
+        price_max = np.nanmax(price_traders_max, price_flea)
+        flea_best = np.nanargmax(price_traders_max, price_flea)
 
-        flea_best = False
         trader = best_trader
-        if price_flea > price_traders_max:
-            flea_best = True
+        if flea_best == 1:
             trader = 'flea'
 
         if math.isnan(price_max):
