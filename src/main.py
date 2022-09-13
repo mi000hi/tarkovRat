@@ -16,6 +16,9 @@ from PIL import Image, ImageStat, ImageTk
 from matplotlib import pyplot as plt
 from os.path import exists
 
+
+
+
 ### INVENTORY ITEM DETECTION ###
 
 def edge_detection(img_np):
@@ -119,6 +122,22 @@ def scale_image(image, scale_factor=2, width=-1, height=-1):
 
 
 ### ITEM PREDICTION ###
+
+def tax(itemindex, price_rubels):
+    global all_items_df
+
+    t_i = 0.05
+    t_r = 0.1
+    baseprice = all_items_df.loc[itemindex, 'basePrice']
+    quantity = 1
+    quantity_factor = 1
+    v_o = baseprice * quantity / quantity_factor
+    v_r = price_rubels # value of requirements
+    p_o = np.log10(v_o / v_r)
+    p_r = np.log10(v_r / v_o)
+
+    tax = v_o * t_i * (4**p_o) * quantity_factor + v_r * t_r * (4**p_r) * quantity_factor
+    return tax
 
 def load_icons_from_disk(verbose=False):
     global all_items_df
@@ -420,9 +439,14 @@ def add_price_labels():
         else:
             best_trader = traders.get(np.nanargmax(price_traders))
         
-        # check trader or flea
+        # subtract tax from flea price
         if math.isnan(price_flea):
             price_flea = 0
+        else:
+            flea_tax = tax(prediction_index, price_flea)
+            price_flea -= flea_tax
+
+        # check trader or flea
         price_max = max(price_traders_max, price_flea)
         flea_best = np.argmax([price_traders_max, price_flea])
 
@@ -497,6 +521,7 @@ def items_dict_to_df(all_items):
         all_items_df.iloc[index]['height'] = all_items[index].get('height')
         all_items_df.iloc[index]['flea_avg48'] = all_items[index].get('avg24hPrice')
         all_items_df.iloc[index]['flea_ch48percent'] = all_items[index].get('changeLast48hPercent')
+        all_items_df.iloc[index]['basePrice'] = all_items[index].get('basePrice')
 
         # iterate over all traders that can buy the item
         for offer in all_items[index].get('sellFor'):
