@@ -10,6 +10,7 @@ import pyautogui
 import threading
 import time
 import requests
+import random
 
 from PIL import Image, ImageStat, ImageTk
 from matplotlib import pyplot as plt
@@ -18,65 +19,63 @@ from os.path import exists
 ### INVENTORY ITEM DETECTION ###
 
 def edge_detection(img_np):
-    img = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
-#     img = cv2.blur(img, (3,3))
+    img = img_np.copy()
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     img = cv2.GaussianBlur(img, (3,3), 0)
     img = cv2.Canny(img, threshold1=50, threshold2=200, apertureSize=5)
-#     img = cv2.blur(img, (2,2))
     img = cv2.blur(img, (3,3))
     return img
 
 def inventory_line_detection(img):
+    global window_scale_factor
     img_inventory_edge = edge_detection(img)
     
+    # horizontal and vertical line detection
+    line_length = (int) (40 * window_scale_factor)
     img_horizontal = img_inventory_edge.copy()
     img_vertical = img_inventory_edge.copy()
 
-    line_length = 50 #(int) (50 * window_scale_factor)
     horizontal_struct = cv2.getStructuringElement(cv2.MORPH_RECT, (line_length,1))
     vertical_struct = cv2.getStructuringElement(cv2.MORPH_RECT, (1,line_length))
-
     cv2.erode(img_horizontal, horizontal_struct, img_horizontal)
-    cv2.dilate(img_horizontal, horizontal_struct, img_horizontal)
-
     cv2.erode(img_vertical, vertical_struct, img_vertical)
+    cv2.dilate(img_horizontal, horizontal_struct, img_horizontal)
     cv2.dilate(img_vertical, vertical_struct, img_vertical)
 
     result = cv2.add(img_horizontal, img_vertical)
     return result
 
-def find_slot_locations(inventory_filtered, slot_gray):
+def find_slot_locations(inventory_filtered, slot_gray, min_x = 1000):
     global slot_locations, nr_valid_predictions
+    global window_scale_factor
 
-    slot_x_offset = 1300
+    slot_x_offset = min_x
     slot_y_offset = 100
     slot_x_max = 2900
     slot_y_max = 1300
+    inv = inventory_filtered[slot_y_offset:slot_y_max, slot_x_offset:slot_x_max].copy()
+    slot = slot_gray.copy()
+
+    matched_slots = cv2.matchTemplate(inv, slot, cv2.TM_CCORR_NORMED)
     
-    inv = inventory_filtered[slot_y_offset:slot_y_max, slot_x_offset:slot_x_max]
-    matched_slots = cv2.matchTemplate(inv, slot_gray, cv2.TM_CCORR_NORMED)
-    # matched_slots = inventory_filtered
+    threshold = 0.6
+    min_distance = 60 * window_scale_factor
     
-    threshold = 0.7
-    # threshold = 150
-    slots_min_x = 0 #(int) (1920/3)
-    min_distance = 50
+    # find slots in filtered inventory image
     slots = []
-    
     for y in range(matched_slots.shape[0]):
         for x in range(matched_slots.shape[1]):
             if matched_slots[y][x] > threshold:
-                if x > slots_min_x:
-                    slots.append((x,y))
+                slots.append((x,y))
     
     # filter number of locations
     valid_slots = 0
     for i,new_slot in enumerate(slots):
         if valid_slots >= len(slot_locations):
+            print(f"Reached maximum amount of valid slots: {valid_slots}")
             break
         add_slot = True
-        x = new_slot[0]
-        y = new_slot[1]
+        x,y = new_slot
         for j in range(valid_slots):
             s = slot_locations[j]
             if abs(s[0]-x) < min_distance and abs(s[1]-y) < min_distance:
@@ -109,80 +108,178 @@ def get_item_images_from_inventory(inventory):
         
     item_images_updated = True
 
+def scale_image(image, scale_factor=2, width=-1, height=-1):
+    if width == -1 or height == -1:
+        width = (int) (image.shape[1]*scale_factor)
+        height = (int) (image.shape[0]*scale_factor)
+    resized = cv2.resize(image, (width,height))
+    return resized
+
+
 
 
 ### ITEM PREDICTION ###
 
 def load_icons_from_disk(verbose=False):
     global all_items_df
+    global path_grid_icons,filename_ending_grid_icon,window_scale_factor
     
     icons = []
     for index,item in all_items_df.iterrows():
         filename = path_grid_icons + item['id'] + filename_ending_grid_icon
-        if exists(filename):
-            img = np.asarray(Image.open(filename))
-            img = cv2.resize(img, ((int) (img.shape[0]*window_scale_factor)
-                                   , (int) (img.shape[1]*window_scale_factor)))
-            icons.append(img)
-        else:
+        if not exists(filename):
             icons.append([])
             if verbose:
                 print(f"File {filename} does not exist.")
+        else:
+            width_in_slots = item.loc['width']
+            height_in_slots = item.loc['height']
+            icon = np.asarray(Image.open(filename))
+            icon = scale_image(icon, width=(int) (width_in_slots*slot_size*window_scale_factor)
+                    , height=(int) (height_in_slots*slot_size*window_scale_factor))
+            icons.append(icon)
+
     return icons
 
-def run_sift(img):
+def run_sift(img, nr_corners=80, nr_selected_corners=999999, auto_threshold=True, verbose=False):
     global sift
-    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    kp,des = sift.detectAndCompute(gray,None)
+    nr_selected_corners = min(nr_selected_corners, nr_corners)
+    threshold_step = 2
+    threshold = -threshold_step
+    
+    # adjust threshold to get consistent number of corners
+    kp = []
+    while len(kp) > nr_corners or len(kp) == 0:
+        threshold += 2
+        fast = cv2.FastFeatureDetector_create(threshold=threshold)
+        kp = fast.detect(img, None)
+        
+        if len(kp) == 0:
+            return [],None
+        if not auto_threshold:
+            break
+
+    # histogram for empty slot detection
+    hist_x = [0] * (img.shape[1])
+    hist_y = [0] * (img.shape[0])
+    empty_slot_threshold = 0.2*len(kp)
+    for k in kp:
+        hist_x[(int) (k.pt[0])] += 1
+        hist_y[(int) (k.pt[1])] += 1
+    if max(hist_x) > empty_slot_threshold or max(hist_y) > empty_slot_threshold:
+        if verbose:
+            print("I think this is an empty slot...")
+        return [],None
+    
+    # randomly select kps to get them uniformly distributed
+    kp_selected = kp
+    if nr_selected_corners < nr_corners:
+        kp_selected = []      
+        for i in range(nr_selected_corners):
+            rand_kp = kp[random.randint(0,len(kp)-1)]
+
+            # filter kp from fir symbol
+            # TODO: dynamic fir symbol size
+            if rand_kp.pt[0] > 50 and rand_kp.pt[1] > 50:
+                continue
+            kp_selected.append(rand_kp)
+    
+    # compute descriptors
+    kp,des = sift.compute(img, kp_selected)
     return kp,des
 
 def create_all_descriptors():
-    global icons
+    global icons, all_items_df, slot_size
+
     descriptors = []
-    for icon in icons:
+    descriptors_values = []
+    descriptors_values_length = 0
+    for i,icon in enumerate(icons):
+        # no item icon
         if len(icon) == 0:
             descriptors.append(None)
             continue
-        icon = icon[0:slot_size, 0:slot_size]
-        kp,des = run_sift(icon)
-        descriptors.append(des)
-    return descriptors
+        descriptors.append([])
 
-def predict_icon(img):
-    global icons, bf, descriptors
+        # descriptors for each item slot
+        w = all_items_df.loc[i,'width']
+        h = all_items_df.loc[i,'height']
+        for x in range(w):
+            for y in range(h):
+                icon_slot = icon[y*slot_size:(y+1)*slot_size, x*slot_size:(x+1)*slot_size].copy()
+                kp,des = run_sift(icon_slot, nr_corners=50)
+
+                descriptors[i].append(descriptors_values_length)
+                descriptors_values.append(des)
+                descriptors_values_length += 1
+
+    return descriptors, descriptors_values
+
+def predict_icon(img, verbose=False):
+    global icons, bf, descriptors, descriptors_values
+
     distances = []
+    distances_local = []
+    kp,des = run_sift(img, nr_corners=50, nr_selected_corners=10)
 
-    kp,des = run_sift(img)
+    if verbose:
+        print(f"nr kp: {len(kp)}")
 
     for i in range(len(icons)):
+        # no kp / des found
         if descriptors[i] is None:
             distances.append(999999)
             continue
 
-        matches = bf.match(des,descriptors[i])
-        matches = sorted(matches, key = lambda x:x.distance)
-        matches = matches[:30]
-        
-        if len(matches) == 0:
-            distances.append(999999)
-            continue
+        distances_local = []
+        max_slots = min(6, len(descriptors[i])) # max slot size of considered items
+        for j in range(max_slots):
+            # no kp / des found for specific slot
+            if descriptors_values[descriptors[i][j]] is None:
+                distances_local.append(999999)
+                continue
 
-        distance = 0.0
-        for match in matches:
-            distance += match.distance/len(matches)
+            matches = bf.match(des,descriptors_values[descriptors[i][j]])
+            matches = sorted(matches, key = lambda x:x.distance)
             
-        distances.append(distance)
+            # if too few features, abort
+            if len(matches) < 5:
+                distances_local.append(999999)
+                continue
 
+            # sum up match distances
+            distance = 0.0
+            for match in matches:
+                distance += match.distance
+            distance = distance/len(matches)
+            
+            distances_local.append(distance)
+
+        # return distance of best matching slot
+        min_distance = min(distances_local)
+        distances.append(min_distance)
+
+    # item with lowest distance is prediction
     prediction = np.argmin(distances)
     min_distance = min(distances)
+    
+    if verbose:
+        print(f"distance of prediction item: {min_distance}")
+    
     return prediction,min_distance
 
-def predict_all_icons(images, predictions, distances):
-    for item in images:
+def predict_all_icons(images, predictions, distances, verbose=False):
+    for i,item in enumerate(images):
+        if verbose and i%10 == 0:
+            print(f"predicting item nr {i}")
         p,d = predict_icon(item)
         predictions.append(p)
         distances.append(d)
-        
+
+
+
+
+
 def predict_current_inventory(predictions_df):
     global root
     
@@ -202,13 +299,16 @@ def predict_current_inventory(predictions_df):
     # get items from screenshot
     get_predictions_from_inventory(screenshot)
 
-def threaded_prediction(items):
+def threaded_prediction(items, verbose=False):
     global item_images_updated, nr_valid_predictions, predictions_updated
     global predictions_df, slot_locations
     global predictions, distances, prediction_threshold
     global last_api_update, all_items_df
     
     while True:
+        global STOP_THREADS
+        if STOP_THREADS:
+            break
         if not item_images_updated:
             # update item data every 10 mins
             now = time.time()
@@ -217,7 +317,9 @@ def threaded_prediction(items):
                 all_items_df = update_items_df(getAllItemsPrices())
                 last_api_update = now
             time.sleep(1)
-#             print("Thread running...")
+            if verbose:
+                print("Thread running...")
+
         else:
             print(f"we have {nr_valid_predictions} new predictions")
             for i in range(nr_valid_predictions):
@@ -249,19 +351,18 @@ def get_predictions_from_inventory(inventory):
     find_slot_locations(inventory_filtered, img_slot_gray)
     get_item_images_from_inventory(inventory)
     t1 = time.time()
-    print(f'inventory took {t1-t0} s')
+    print(f'inventory slots and images took {t1-t0} s')
     
     # predict each item from inventory
     ## thread is already doing this
 
-    t2 = time.time()
-    print(f'item predictions took {t2-t1} s')
-    return predictions_df
+    # TODO: can return be removed?
+    # return predictions_df
 
 def place_label(text, x, y, index):
-    global root
+    global root,font_label_item
 
-    label = tk.Label(root, text=text, font=("helvetica", 10), fg='white', bg='black')
+    label = tk.Label(root, text=text, font=font_label_item, fg='white', bg='black')
     label.place(x=x, y=y+20, anchor = 'nw')
     
     # remove old label
@@ -274,13 +375,13 @@ def place_label(text, x, y, index):
     
 def create_overlay():
     root = tk.Tk()
-    root.title("window title")
+    root.title("this is not a virus. be a chad")
     root.geometry("%dx%d+%d+%d" % (window_width,window_height,x_window,y_window))
     root.attributes('-topmost', True)
     root.overrideredirect(True)
     root.configure(bg='red')
 
-    # make color red transparent
+    # make color black transparent
     root.wm_attributes('-transparentcolor', 'black')
     return root
 
@@ -294,25 +395,32 @@ def add_price_labels():
     
     for i in range(nr_valid_predictions):
         prediction = predictions_df.loc[i]
-        index = prediction[2]
-        distance = prediction[3]
-        if index == -1 or distance > predictions_threshold:
+        prediction_index = prediction[2]
+        prediction_distance = prediction[3]
+        if prediction_index == -1 or prediction_distance > predictions_threshold:
             if not price_labels[i] is None:
                 price_labels[i].destroy()
                 price_labels[i] = None
             continue
-            
+    
+        # label location
         x = prediction[0]
         y = prediction[1]
+
+        # find prices for predicted item
         traders = {0:'prapor', 1:'therapist', 2:'fence', 3:'skier', 4:'peacekeeper', 5:'mechanic', 6:'ragman', 7:'jaeger'}
-        price_flea = all_items_df.loc[index, 'fleaMarket']
-        price_traders = all_items_df.loc[index, 'prapor':'jaeger']
+        price_flea = all_items_df.loc[prediction_index, 'fleaMarket']
+        price_traders = all_items_df.loc[prediction_index, 'prapor':'jaeger']
+        
+        # find best trader
         price_traders_max = np.nanmax(price_traders.values.tolist() + [0])
         best_trader = 0
         if price_traders_max == 0:
             best_trader = '-1'
         else:
             best_trader = traders.get(np.nanargmax(price_traders))
+        
+        # check trader or flea
         if math.isnan(price_flea):
             price_flea = 0
         price_max = max(price_traders_max, price_flea)
@@ -322,19 +430,26 @@ def add_price_labels():
         if flea_best == 1:
             trader = 'flea'
 
+        # no price available
         if math.isnan(price_max):
             continue
+
+        # price per slot
+        nr_slots = all_items_df.loc[prediction_index, 'width'] * all_items_df.loc[prediction_index, 'height']
+        price_max = price_max/nr_slots
+        # format price to string
         price = (int) (price_max/1000)
         price_string = str(price) + 'k'
         if price == 0:
             price = price_max
             price_string = str(price)
-        name = all_items_df.loc[index][0]
+        name = all_items_df.loc[prediction_index][0]
         
+        # create the new label
         text = name + '\n' + price_string + '\n' + trader
         place_label(text, x, y, i)
     
-    # remove other labels
+    # remove other old labels
     for i in range(nr_valid_predictions, len(price_labels)):
         if price_labels[i] is None:
             break
@@ -352,7 +467,7 @@ def update():
         update_price_labels()
     
     # run itself again after 100 ms
-    root.after(100, update)
+    root.after(200, update)
     
 def update_predictions():
     global predictions_df
@@ -396,13 +511,9 @@ def update_items_df(all_items_dict):
 
     # iterate over all items
     for index in range(len(all_items_dict)):
-        # all_items_df.iloc[index]['name'] = all_items_dict[index].get('shortName')
         if all_items_df.iloc[index]['id'] != all_items_dict[index].get('id'):
             print(f"The item {all_items_df.iloc[index]['name']} does not match the new updated information!")
             continue
-        # all_items_df.iloc[index]['id'] = all_items_dict[index].get('id')
-        # all_items_df.iloc[index]['width'] = all_items_dict[index].get('width')
-        # all_items_df.iloc[index]['height'] = all_items_dict[index].get('height')
         all_items_df.iloc[index]['flea_avg48'] = all_items_dict[index].get('avg24hPrice')
         all_items_df.iloc[index]['flea_ch48percent'] = all_items_dict[index].get('changeLast48hPercent')
 
@@ -437,8 +548,16 @@ def getAllItemsPrices():
     }
     """
     result = run_query(query_all_items_prices)
-    #result = run_query(water_query)
     return result['data']['items']
+
+
+
+
+
+############################################################
+# MAIN PROGRAM                                             #
+############################################################
+
 
 # paths
 path_icons = './icons/'
@@ -451,6 +570,7 @@ window_title_tarkov = 'EscapeFromTarkov'
 
 icons = []
 descriptors = []
+descriptors_values = []
 all_items_df = None
 max_items_to_predict = 300
 nr_valid_predictions = 0
@@ -466,6 +586,7 @@ price_labels = []
 labels_visible = True
 item_images_updated = False
 predictions_updated = False
+STOP_THREADS = False
 thread_predict = threading.Thread(target=threaded_prediction, args=(item_images,))
 sift = cv2.SIFT_create()
 bf = cv2.BFMatcher()
@@ -480,17 +601,18 @@ window_tarkov_size = window_tarkov.size
 window_scale_factor = window_tarkov_size[1] / 1080.0
 slot_size = (int) (64 * window_scale_factor) # in pixels, for FHD resolution
 
+font_label_item = ("helvetica", 10)
+overlay_border_size = 5
+
 # get needed data
-# all_items_df = pd.read_csv(path_data + 'all_items.csv')
 all_items_df = items_dict_to_df(getAllItemsPrices())
 icons = load_icons_from_disk()
-descriptors = create_all_descriptors()
+descriptors,descriptors_values = create_all_descriptors()
 
 # load and filter slot reference image
 img_slot = Image.open(path_images + 'slot_empty.png')
 img_slot = np.asarray(img_slot)
-img_slot = cv2.resize(img_slot, ((int) (img_slot.shape[0]*window_scale_factor)
-                                 , (int) (img_slot.shape[1]*window_scale_factor)))
+img_slot = scale_image(img_slot, scale_factor=window_scale_factor)
 img_slot_gray = cv2.cvtColor(img_slot, cv2.COLOR_BGR2GRAY)
 
 # initialize arrays
@@ -518,8 +640,8 @@ window_height = window_tarkov_size[1]
 root = create_overlay()
 
 # create a transparent frame to make a border
-my_frame = tk.Frame(root, width=window_width-20, height=window_height-20, bg='black')
-my_frame.place(x=10,y=10)
+my_frame = tk.Frame(root, width=window_width-2*overlay_border_size, height=window_height-2*overlay_border_size, bg='black')
+my_frame.place(x=overlay_border_size,y=overlay_border_size)
 
 # add a button
 button1 = tk.Button(root, text='Update predictions', fg='blue', command=update_predictions)
@@ -536,4 +658,7 @@ root.focus_force()
 root.bind('<Escape>', lambda e: root.destroy())
 root.mainloop()
 
-print("End of program")
+# stop the update thread
+STOP_THREADS = True
+thread_predict.join()
+print("Update thread stopped -- End of program")
