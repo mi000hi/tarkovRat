@@ -565,6 +565,7 @@ def getAllItemsPrices():
             height
             avg24hPrice
             changeLast48hPercent
+            basePrice
             sellFor {
                 price
                 source
