@@ -166,7 +166,7 @@ def load_icons_from_disk(verbose=False):
 
     return icons
 
-def run_sift(img, nr_corners=80, nr_selected_corners=999999, auto_threshold=True, verbose=False):
+def run_sift(img, nr_corners=100, nr_selected_corners=999999, auto_threshold=True, verbose=False):
     global sift
     nr_selected_corners = min(nr_selected_corners, nr_corners)
     threshold_step = 2
@@ -198,14 +198,14 @@ def run_sift(img, nr_corners=80, nr_selected_corners=999999, auto_threshold=True
     
     # randomly select kps to get them uniformly distributed
     kp_selected = kp
+    fir_factor = 0.7
     if nr_selected_corners < nr_corners:
         kp_selected = []      
         for i in range(nr_selected_corners):
             rand_kp = kp[random.randint(0,len(kp)-1)]
 
             # filter kp from fir symbol
-            # TODO: dynamic fir symbol size
-            if rand_kp.pt[0] > 50 and rand_kp.pt[1] > 50:
+            if rand_kp.pt[0] > fir_factor*slot_size and rand_kp.pt[1] > fir_factor*slot_size:
                 continue
             kp_selected.append(rand_kp)
     
@@ -232,7 +232,8 @@ def create_all_descriptors():
         for x in range(w):
             for y in range(h):
                 icon_slot = icon[y*slot_size:(y+1)*slot_size, x*slot_size:(x+1)*slot_size].copy()
-                kp,des = run_sift(icon_slot, nr_corners=50)
+                # TODO: may be bad idea to not use autothreshold
+                kp,des = run_sift(icon_slot, nr_corners=110, nr_selected_corners=100, auto_threshold=False)
 
                 descriptors[i].append(descriptors_values_length)
                 descriptors_values.append(des)
@@ -240,12 +241,16 @@ def create_all_descriptors():
 
     return descriptors, descriptors_values
 
-def predict_icon(img, verbose=False):
+def predict_icon(img, improved=False, verbose=False):
     global icons, bf, descriptors, descriptors_values
 
     distances = []
     distances_local = []
-    kp,des = run_sift(img, nr_corners=50, nr_selected_corners=10)
+    kp,des = None,None
+    if improved:
+        kp,des = run_sift(img, nr_corners=100, nr_selected_corners=30)
+    else:
+        kp,des = run_sift(img, nr_corners=50, nr_selected_corners=10)
 
     if verbose:
         print(f"nr kp: {len(kp)}")
@@ -316,10 +321,11 @@ def get_image_around_mouse(position):
 def predict_item_under_mouse():
     global item_images, max_items_to_predict, item_images_updated
     global slot_locations, nr_valid_predictions, slot_size
+    global font_label_manual_item
 
     mouse_pos = pyautogui.position()
     item = get_image_around_mouse(mouse_pos)
-    prediction,distance = predict_icon(item)
+    prediction,distance = predict_icon(item, improved=True)
     
     # label location
     x = (int) (mouse_pos[0] - 0.4*slot_size)
@@ -331,7 +337,7 @@ def predict_item_under_mouse():
     # format price to string
     text = format_price_for_label(prediction, price_max, trader)
 
-    place_label(text, x, y, -1, font_color='red')
+    place_label(text, x, y, -1, font_color='red', font=font_label_manual_item)
 
 def predict_current_inventory(predictions_df):
     global root
@@ -365,7 +371,7 @@ def threaded_prediction(items, verbose=False):
         if not item_images_updated:
             # update item data every 10 mins
             now = time.time()
-            if now - last_api_update < 10 * 60:
+            if now - last_api_update > 10 * 60:
                 print("Updating the API data.")
                 all_items_df = update_items_df(getAllItemsPrices())
                 last_api_update = now
@@ -412,14 +418,14 @@ def get_predictions_from_inventory(inventory):
     # TODO: can return be removed?
     # return predictions_df
 
-def place_label(text, x, y, index, font_color='white'):
+def place_label(text, x, y, index, font_color='white', verbose=False):
     global root,font_label_item
 
     label = tk.Label(root, text=text, font=font_label_item, fg=font_color, bg='black')
     label.place(x=x, y=y+20, anchor = 'nw')
     
     # remove old label
-    if index == -1:
+    if verbose and index == -1:
         print(f"label index is -1 => here only when predict item under mouse -- correct??")
     if index < len(price_labels):
         if not price_labels[index] is None:
@@ -538,10 +544,9 @@ def remove_price_labels():
             label.destroy()
         
 def update():
-    global root,canvas
+    global root,key_manual_predict
 
-    # TODO: change key
-    if keyboard.is_pressed('8'):
+    if keyboard.is_pressed(key_manual_predict):
         predict_item_under_mouse()
     
     if labels_visible:
@@ -641,6 +646,7 @@ def getAllItemsPrices():
 # MAIN PROGRAM                                             #
 ############################################################
 
+print("Program Starts -- Be patient")
 
 # paths
 path_icons = './icons/'
@@ -650,6 +656,8 @@ path_data = './data/'
 
 filename_ending_grid_icon = '-grid-image.jpg'
 window_title_tarkov = 'EscapeFromTarkov'
+
+key_manual_predict = 'm'
 
 icons = []
 descriptors = []
@@ -677,6 +685,7 @@ window_scale_factor = 1
 last_api_update = 0
 
 # get tarkov window
+print("Looking for the EFT window...")
 window_tarkov = gw.getWindowsWithTitle(window_title_tarkov)[0]
 window_tarkov_position = window_tarkov.topleft
 window_tarkov_size = window_tarkov.size
@@ -685,11 +694,15 @@ window_scale_factor = window_tarkov_size[1] / 1080.0
 slot_size = (int) (64 * window_scale_factor) # in pixels, for FHD resolution
 
 font_label_item = ("helvetica", 10)
+font_label_manual_item = ("helvetica", 16)
 overlay_border_size = 5
 
 # get needed data
+print("Load item information...")
 all_items_df = items_dict_to_df(getAllItemsPrices())
+print("Load item icons from disk...")
 icons = load_icons_from_disk()
+print("Create image descriptors for items...")
 descriptors,descriptors_values = create_all_descriptors()
 
 # load and filter slot reference image
@@ -708,9 +721,11 @@ distances = [0] * max_items_to_predict
 slot_locations = [(0,0)] * max_items_to_predict
 
 # start prediction thread
+print("Start the prediction thread...")
 thread_predict.start()
 
 # get items from screenshot
+print("Predict items on current screen...")
 predict_current_inventory(predictions_df)
 
 # find overlay position
@@ -720,6 +735,7 @@ window_width = window_tarkov_size[0]
 window_height = window_tarkov_size[1]
 
 # create the window
+print("Create the overlay...")
 root = create_overlay()
 
 # create a transparent frame to make a border
@@ -734,6 +750,8 @@ button2.pack()
 labels_visible = True
 
 # run the update process
+print("Start updating the overlay... -- Use ESCAPE to kill the program")
+print(f"Use {key_manual_predict} to predict slot under mouse.")
 update()
 
 # show the window and take focus
