@@ -11,6 +11,7 @@ import threading
 import time
 import requests
 import random
+import keyboard
 
 from PIL import Image, ImageStat, ImageTk
 from matplotlib import pyplot as plt
@@ -304,6 +305,34 @@ def predict_all_icons(images, predictions, distances, verbose=False):
 
 
 
+def get_image_around_mouse(position):
+    slot_size = 64 * 1.2
+    x = (int) (position[0] - 0.5*slot_size)
+    y = (int) (position[1] - 0.5*slot_size)
+    screenshot = pyautogui.screenshot(region=(x,y,slot_size,slot_size))
+    screenshot = np.array(screenshot)
+    return screenshot
+
+def predict_item_under_mouse():
+    global item_images, max_items_to_predict, item_images_updated
+    global slot_locations, nr_valid_predictions, slot_size
+
+    mouse_pos = pyautogui.position()
+    item = get_image_around_mouse(mouse_pos)
+    prediction,distance = predict_icon(item)
+    
+    # label location
+    x = (int) (mouse_pos[0] - 0.4*slot_size)
+    y = (int) (mouse_pos[1] - 0.4*slot_size)
+
+    # find prices for predicted item
+    price_max,trader = get_price_per_slot(prediction)
+
+    # format price to string
+    text = format_price_for_label(prediction, price_max, trader)
+
+    place_label(text, x, y, -1, font_color='red')
+
 def predict_current_inventory(predictions_df):
     global root
     
@@ -383,18 +412,21 @@ def get_predictions_from_inventory(inventory):
     # TODO: can return be removed?
     # return predictions_df
 
-def place_label(text, x, y, index):
+def place_label(text, x, y, index, font_color='white'):
     global root,font_label_item
 
-    label = tk.Label(root, text=text, font=font_label_item, fg='white', bg='black')
+    label = tk.Label(root, text=text, font=font_label_item, fg=font_color, bg='black')
     label.place(x=x, y=y+20, anchor = 'nw')
     
     # remove old label
+    if index == -1:
+        print(f"label index is -1 => here only when predict item under mouse -- correct??")
     if index < len(price_labels):
         if not price_labels[index] is None:
             price_labels[index].destroy()
         price_labels[index] = label
     else:
+        # TODO: is this needed???
         price_labels.append(label)
     
 def create_overlay():
@@ -412,6 +444,61 @@ def create_overlay():
 def update_price_labels():
     remove_price_labels()
     add_price_labels()
+
+def get_price_per_slot(item_index):
+    global all_items_df
+
+    traders = {0:'prapor', 1:'therapist', 2:'fence', 3:'skier', 4:'peacekeeper', 5:'mechanic', 6:'ragman', 7:'jaeger'}
+    price_flea = all_items_df.loc[item_index, 'fleaMarket']
+    price_traders = all_items_df.loc[item_index, 'prapor':'jaeger']
+    
+    # find best trader
+    price_traders_max = np.nanmax(price_traders.values.tolist() + [0])
+    best_trader = 0
+    if price_traders_max == 0:
+        best_trader = '-1'
+    else:
+        best_trader = traders.get(np.nanargmax(price_traders))
+    
+    # subtract tax from flea price
+    if math.isnan(price_flea):
+        price_flea = 0
+    else:
+        flea_tax = tax(item_index, price_flea)
+        price_flea -= flea_tax
+
+    # check trader or flea
+    price_max = max(price_traders_max, price_flea)
+    flea_best = np.argmax([price_traders_max, price_flea])
+
+    trader = best_trader
+    if flea_best == 1:
+        trader = 'flea'
+
+    # no price available
+    if math.isnan(price_max):
+        return 0
+
+    # price per slot
+    nr_slots = all_items_df.loc[item_index, 'width'] * all_items_df.loc[item_index, 'height']
+    price_max = price_max/nr_slots
+
+    return price_max, trader
+
+def format_price_for_label(prediction_index, price_max, trader):
+    global all_items_df
+
+    price = (int) (price_max/1000)
+    price_string = str(price) + 'k'
+    if price == 0:
+        price = price_max
+        price_string = str(price)
+    name = all_items_df.loc[prediction_index][0]
+    
+    # create the new label
+    text = name + '\n' + price_string + '\n' + trader
+
+    return text
 
 def add_price_labels():
     global nr_valid_predictions, predictions_df, price_labels, all_items_df
@@ -432,50 +519,11 @@ def add_price_labels():
         y = prediction[1]
 
         # find prices for predicted item
-        traders = {0:'prapor', 1:'therapist', 2:'fence', 3:'skier', 4:'peacekeeper', 5:'mechanic', 6:'ragman', 7:'jaeger'}
-        price_flea = all_items_df.loc[prediction_index, 'fleaMarket']
-        price_traders = all_items_df.loc[prediction_index, 'prapor':'jaeger']
-        
-        # find best trader
-        price_traders_max = np.nanmax(price_traders.values.tolist() + [0])
-        best_trader = 0
-        if price_traders_max == 0:
-            best_trader = '-1'
-        else:
-            best_trader = traders.get(np.nanargmax(price_traders))
-        
-        # subtract tax from flea price
-        if math.isnan(price_flea):
-            price_flea = 0
-        else:
-            flea_tax = tax(prediction_index, price_flea)
-            price_flea -= flea_tax
+        price_max,trader = get_price_per_slot(prediction_index)
 
-        # check trader or flea
-        price_max = max(price_traders_max, price_flea)
-        flea_best = np.argmax([price_traders_max, price_flea])
-
-        trader = best_trader
-        if flea_best == 1:
-            trader = 'flea'
-
-        # no price available
-        if math.isnan(price_max):
-            continue
-
-        # price per slot
-        nr_slots = all_items_df.loc[prediction_index, 'width'] * all_items_df.loc[prediction_index, 'height']
-        price_max = price_max/nr_slots
         # format price to string
-        price = (int) (price_max/1000)
-        price_string = str(price) + 'k'
-        if price == 0:
-            price = price_max
-            price_string = str(price)
-        name = all_items_df.loc[prediction_index][0]
-        
-        # create the new label
-        text = name + '\n' + price_string + '\n' + trader
+        text = format_price_for_label(prediction_index, price_max, trader)
+
         place_label(text, x, y, i)
     
     # remove other old labels
@@ -491,6 +539,10 @@ def remove_price_labels():
         
 def update():
     global root,canvas
+
+    # TODO: change key
+    if keyboard.is_pressed('8'):
+        predict_item_under_mouse()
     
     if labels_visible:
         update_price_labels()
