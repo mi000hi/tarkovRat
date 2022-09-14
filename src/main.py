@@ -126,12 +126,17 @@ def scale_image(image, scale_factor=2, width=-1, height=-1):
 def tax(itemindex, price_rubels):
     global all_items_df
 
+    if price_rubels == 0:
+        return 0
+
     t_i = 0.05
     t_r = 0.1
     baseprice = all_items_df.loc[itemindex, 'basePrice']
     quantity = 1
     quantity_factor = 1
     v_o = baseprice * quantity / quantity_factor
+    if v_o == 0:
+        return 0
     v_r = price_rubels # value of requirements
     p_o = np.log10(v_o / v_r)
     p_r = np.log10(v_r / v_o)
