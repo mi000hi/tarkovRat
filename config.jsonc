@@ -38,7 +38,7 @@
 
     "key_manual_predict": "m",
 
-    "max_itmes_to_predict": 300,
+    "max_items_to_predict": 300,
     "predictions_threshold": 300,
 
     "window_title_tarkov": "EscapeFromTarkov",

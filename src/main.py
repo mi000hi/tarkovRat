@@ -12,6 +12,7 @@ import time
 import requests
 import random
 import keyboard
+import json
 
 from PIL import Image, ImageStat, ImageTk
 from matplotlib import pyplot as plt
@@ -49,21 +50,23 @@ def inventory_line_detection(img):
     result = cv2.add(img_horizontal, img_vertical)
     return result
 
-def find_slot_locations(inventory_filtered, slot_gray, min_x = 1000):
+def find_slot_locations(inventory_filtered, slot_gray, min_x=1000):
     global slot_locations, nr_valid_predictions
     global window_scale_factor
+    global slot_locations_min_x,slot_locations_min_y,slot_locations_max_x,slot_locations_max_y
+    global slot_locations_threshold,slot_locations_min_distance
 
     slot_x_offset = min_x
-    slot_y_offset = 100
-    slot_x_max = 2900
-    slot_y_max = 1300
+    slot_y_offset = slot_locations_min_y
+    slot_x_max = slot_locations_max_x
+    slot_y_max = slot_locations_max_y
     inv = inventory_filtered[slot_y_offset:slot_y_max, slot_x_offset:slot_x_max].copy()
     slot = slot_gray.copy()
 
     matched_slots = cv2.matchTemplate(inv, slot, cv2.TM_CCORR_NORMED)
     
-    threshold = 0.6
-    min_distance = 60 * window_scale_factor
+    threshold = slot_locations_threshold
+    min_distance = slot_locations_min_distance * window_scale_factor
     
     # find slots in filtered inventory image
     slots = []
@@ -126,15 +129,16 @@ def scale_image(image, scale_factor=2, width=-1, height=-1):
 
 def tax(itemindex, price_rubels):
     global all_items_df
+    global tax_t_i,tax_t_r,tax_quantity,tax_quantity_factor
 
     if price_rubels == 0:
         return 0
 
-    t_i = 0.05
-    t_r = 0.1
+    t_i = tax_t_i
+    t_r = tax_t_r
     baseprice = all_items_df.loc[itemindex, 'basePrice']
-    quantity = 1
-    quantity_factor = 1
+    quantity = tax_quantity
+    quantity_factor = tax_quantity_factor
     v_o = baseprice * quantity / quantity_factor
     if v_o == 0:
         return 0
@@ -168,6 +172,8 @@ def load_icons_from_disk(verbose=False):
 
 def run_sift(img, nr_corners=100, nr_selected_corners=999999, auto_threshold=True, verbose=False):
     global sift
+    global fast_empty_slot_threshold_factor,fast_fir_factor
+
     nr_selected_corners = min(nr_selected_corners, nr_corners)
     threshold_step = 2
     threshold = -threshold_step
@@ -187,7 +193,7 @@ def run_sift(img, nr_corners=100, nr_selected_corners=999999, auto_threshold=Tru
     # histogram for empty slot detection
     hist_x = [0] * (img.shape[1])
     hist_y = [0] * (img.shape[0])
-    empty_slot_threshold = 0.2*len(kp)
+    empty_slot_threshold = fast_empty_slot_threshold_factor*len(kp)
     for k in kp:
         hist_x[(int) (k.pt[0])] += 1
         hist_y[(int) (k.pt[1])] += 1
@@ -198,7 +204,7 @@ def run_sift(img, nr_corners=100, nr_selected_corners=999999, auto_threshold=Tru
     
     # randomly select kps to get them uniformly distributed
     kp_selected = kp
-    fir_factor = 0.7
+    fir_factor = fast_fir_factor
     if nr_selected_corners < nr_corners:
         kp_selected = []      
         for i in range(nr_selected_corners):
@@ -215,6 +221,7 @@ def run_sift(img, nr_corners=100, nr_selected_corners=999999, auto_threshold=Tru
 
 def create_all_descriptors():
     global icons, all_items_df, slot_size
+    global fast_all_item_nr_corners,fast_all_item_nr_selected_corners,fast_all_item_auto_threshold
 
     descriptors = []
     descriptors_values = []
@@ -233,7 +240,7 @@ def create_all_descriptors():
             for y in range(h):
                 icon_slot = icon[y*slot_size:(y+1)*slot_size, x*slot_size:(x+1)*slot_size].copy()
                 # TODO: may be bad idea to not use autothreshold
-                kp,des = run_sift(icon_slot, nr_corners=110, nr_selected_corners=100, auto_threshold=False)
+                kp,des = run_sift(icon_slot, nr_corners=fast_all_item_nr_corners, nr_selected_corners=fast_all_item_nr_selected_corners, auto_threshold=fast_all_item_auto_threshold)
 
                 descriptors[i].append(descriptors_values_length)
                 descriptors_values.append(des)
@@ -243,14 +250,17 @@ def create_all_descriptors():
 
 def predict_icon(img, improved=False, verbose=False):
     global icons, bf, descriptors, descriptors_values
+    global fast_predict_improved_nr_corners,fast_predict_improved_nr_selected_corners
+    global fast_predict_nr_corners,fast_predict_nr_selected_corners
+    global predict_max_nr_slots,predict_min_nr_matched_features
 
     distances = []
     distances_local = []
     kp,des = None,None
     if improved:
-        kp,des = run_sift(img, nr_corners=100, nr_selected_corners=30)
+        kp,des = run_sift(img, nr_corners=fast_predict_improved_nr_corners, nr_selected_corners=fast_predict_improved_nr_selected_corners)
     else:
-        kp,des = run_sift(img, nr_corners=50, nr_selected_corners=10)
+        kp,des = run_sift(img, nr_corners=fast_predict_nr_corners, nr_selected_corners=fast_predict_nr_selected_corners)
 
     if verbose:
         print(f"nr kp: {len(kp)}")
@@ -262,7 +272,7 @@ def predict_icon(img, improved=False, verbose=False):
             continue
 
         distances_local = []
-        max_slots = min(6, len(descriptors[i])) # max slot size of considered items
+        max_slots = min(predict_max_nr_slots, len(descriptors[i])) # max slot size of considered items
         for j in range(max_slots):
             # no kp / des found for specific slot
             if descriptors_values[descriptors[i][j]] is None:
@@ -273,7 +283,7 @@ def predict_icon(img, improved=False, verbose=False):
             matches = sorted(matches, key = lambda x:x.distance)
             
             # if too few features, abort
-            if len(matches) < 5:
+            if len(matches) < predict_min_nr_matched_features:
                 distances_local.append(999999)
                 continue
 
@@ -311,10 +321,13 @@ def predict_all_icons(images, predictions, distances, verbose=False):
 
 
 def get_image_around_mouse(position):
-    slot_size = 64 * 1.2
-    x = (int) (position[0] - 0.5*slot_size)
-    y = (int) (position[1] - 0.5*slot_size)
-    screenshot = pyautogui.screenshot(region=(x,y,slot_size,slot_size))
+    global slot_size
+    global slot_size_around_mouse_factor
+
+    size =  slot_size * slot_size_around_mouse_factor
+    x = (int) (position[0] - 0.5*size)
+    y = (int) (position[1] - 0.5*size)
+    screenshot = pyautogui.screenshot(region=(x,y,size,size))
     screenshot = np.array(screenshot)
     return screenshot
 
@@ -326,10 +339,6 @@ def predict_item_under_mouse():
     mouse_pos = pyautogui.position()
     item = get_image_around_mouse(mouse_pos)
     prediction,distance = predict_icon(item, improved=True)
-    
-    # label location
-    x = (int) (mouse_pos[0] - 0.4*slot_size)
-    y = (int) (mouse_pos[1] - 0.4*slot_size)
 
     # find prices for predicted item
     price_max,trader = get_price_per_slot(prediction)
@@ -337,7 +346,7 @@ def predict_item_under_mouse():
     # format price to string
     text = format_price_for_label(prediction, price_max, trader)
 
-    place_label(text, x, y, -1, font_color='red', font=font_label_manual_item)
+    place_label(text, mouse_pos[0], mouse_pos[1], -1, font_color='red', font=font_label_manual_item, anchor='center')
 
 def predict_current_inventory(predictions_df):
     global root
@@ -363,6 +372,7 @@ def threaded_prediction(items, verbose=False):
     global predictions_df, slot_locations
     global predictions, distances, prediction_threshold
     global last_api_update, all_items_df
+    global items_flea_market_update_interval_mins,thread_prediction_sleep_interval_secs
     
     while True:
         global STOP_THREADS
@@ -371,11 +381,11 @@ def threaded_prediction(items, verbose=False):
         if not item_images_updated:
             # update item data every 10 mins
             now = time.time()
-            if now - last_api_update > 10 * 60:
+            if now - last_api_update > items_flea_market_update_interval_mins * 60:
                 print("Updating the API data.")
                 update_items_df(getAllItemsPrices())
                 last_api_update = now
-            time.sleep(1)
+            time.sleep(thread_prediction_sleep_interval_secs)
             if verbose:
                 print("Thread running...")
 
@@ -418,13 +428,14 @@ def get_predictions_from_inventory(inventory):
     # TODO: can return be removed?
     # return predictions_df
 
-def place_label(text, x, y, index, font_color='white', font=None, verbose=False):
+def place_label(text, x, y, index, font_color='white', font=None, anchor='nw', verbose=False):
     global root,font_label_item
+    global label_y_offset
 
     if font is None:
         font = font_label_item
     label = tk.Label(root, text=text, font=font, fg=font_color, bg='black')
-    label.place(x=x, y=y+20, anchor = 'nw')
+    label.place(x=x, y=y+label_y_offset, anchor=anchor)
     
     # remove old label
     if verbose and index == -1:
@@ -459,6 +470,8 @@ def get_price_per_slot(item_index):
     traders = {0:'prapor', 1:'therapist', 2:'fence', 3:'skier', 4:'peacekeeper', 5:'mechanic', 6:'ragman', 7:'jaeger'}
     price_flea = all_items_df.loc[item_index, 'fleaMarket']
     price_traders = all_items_df.loc[item_index, 'prapor':'jaeger']
+
+    # TODO: check for currency
     
     # find best trader
     price_traders_max = np.nanmax(price_traders.values.tolist() + [0])
@@ -499,7 +512,7 @@ def format_price_for_label(prediction_index, price_max, trader):
     price = (int) (price_max/1000)
     price_string = str(price) + 'k'
     if price == 0:
-        price = price_max
+        price = (int) (price_max)
         price_string = str(price)
     name = all_items_df.loc[prediction_index][0]
     
@@ -547,6 +560,7 @@ def remove_price_labels():
         
 def update():
     global root,key_manual_predict
+    global overlay_update_interval_msecs
 
     if keyboard.is_pressed(key_manual_predict):
         predict_item_under_mouse()
@@ -555,7 +569,7 @@ def update():
         update_price_labels()
     
     # run itself again after 100 ms
-    root.after(200, update)
+    root.after(overlay_update_interval_msecs, update)
     
 def update_predictions():
     global predictions_df
@@ -642,6 +656,51 @@ def getAllItemsPrices():
 
 
 
+def update_json_variables(filename):
+    global slot_locations_min_x,slot_locations_min_y,slot_locations_max_x,slot_locations_max_y,slot_locations_threshold,slot_locations_min_distance,tax_t_i,tax_t_r,tax_quantity,tax_quantity_factor,fast_nr_corners,fast_threshold_step,fast_empty_slot_threshold_factor,fast_fir_factor,fast_all_item_nr_corners,fast_all_item_nr_selected_corners,fast_all_item_auto_threshold,fast_predict_improved_nr_corners,fast_predict_improved_nr_selected_corners,fast_predict_nr_corners,fast_predict_nr_selected_corners,predict_max_nr_slots,predict_min_nr_matched_features,slot_size_around_mouse_factor,items_flea_market_update_interval_mins,thread_prediction_sleep_interval_secs,overlay_update_interval_msecs,label_y_offset,key_manual_predict,max_items_to_predict,predictions_threshold,window_title_tarkov,font_label_item_size,font_label_manual_item_size,overlay_border_size
+
+    config = open(filename)
+    data = json.load(config)
+    data_list = list(data.items())
+
+    slot_locations_min_x = data_list[0][1]
+    slot_locations_min_y = data_list[1][1]
+    slot_locations_max_x = data_list[2][1]
+    slot_locations_max_y = data_list[3][1] 
+    slot_locations_threshold = data_list[4][1]
+    slot_locations_min_distance = data_list[5][1]
+    tax_t_i = data_list[6][1]
+    tax_t_r = data_list[7][1]
+    tax_quantity = data_list[8][1]
+    tax_quantity_factor = data_list[9][1]
+    fast_nr_corners = data_list[10][1]
+    fast_threshold_step = data_list[11][1]
+    fast_empty_slot_threshold_factor = data_list[12][1]
+    fast_fir_factor = data_list[13][1]
+    fast_all_item_nr_corners = data_list[14][1]
+    fast_all_item_nr_selected_corners = data_list[15][1]
+    fast_all_item_auto_threshold = data_list[16][1]
+    fast_predict_improved_nr_corners = data_list[17][1]
+    fast_predict_improved_nr_selected_corners = data_list[18][1]
+    fast_predict_nr_corners = data_list[19][1]
+    fast_predict_nr_selected_corners = data_list[20][1]
+    predict_max_nr_slots = data_list[21][1]
+    predict_min_nr_matched_features = data_list[22][1]
+    slot_size_around_mouse_factor = data_list[23][1]
+    items_flea_market_update_interval_mins = data_list[24][1]
+    thread_prediction_sleep_interval_secs = data_list[25][1]
+    overlay_update_interval_msecs = data_list[26][1]
+    label_y_offset = data_list[27][1]
+    key_manual_predict = data_list[28][1]
+    max_items_to_predict = data_list[29][1]
+    predictions_threshold = data_list[30][1]
+    window_title_tarkov = data_list[31][1]
+    font_label_item_size = data_list[32][1]
+    font_label_manual_item_size = data_list[33][1]
+    overlay_border_size = data_list[34][1]
+
+    config.close()
+
 
 
 ############################################################
@@ -655,27 +714,64 @@ path_icons = './icons/'
 path_images = './images/'
 path_grid_icons = './grid_icons/'
 path_data = './data/'
-
 filename_ending_grid_icon = '-grid-image.jpg'
-window_title_tarkov = 'EscapeFromTarkov'
+config_file = '../config.jsonc'
 
-key_manual_predict = 'm'
 
 icons = []
 descriptors = []
 descriptors_values = []
-all_items_df = None
-max_items_to_predict = 300
-nr_valid_predictions = 0
-predictions_threshold = 300
-predictions_df = None
 item_images = []
 predictions = []
 distances = []
 slot_locations = []
+price_labels = []
+all_items_df = None
+predictions_df = None
+
 img_slot_gray = None
 root = None
-price_labels = []
+
+# variables used in JSON config file
+slot_locations_min_x = 0
+slot_locations_min_y = 0
+slot_locations_max_x = 0
+slot_locations_max_y = 0
+slot_locations_threshold = 0
+slot_locations_min_distance = 0
+tax_t_i = 0
+tax_t_r = 0
+tax_quantity = 0
+tax_quantity_factor = 0
+fast_nr_corners = 0
+fast_threshold_step = 0
+fast_empty_slot_threshold_factor = 0
+fast_fir_factor = 0
+fast_all_item_nr_corners = 0
+fast_all_item_nr_selected_corners = 0
+fast_all_item_auto_threshold = False
+fast_predict_improved_nr_corners = 0
+fast_predict_improved_nr_selected_corners = 0
+fast_predict_nr_corners = 0
+fast_predict_nr_selected_corners = 0
+predict_max_nr_slots = 0
+predict_min_nr_matched_features = 0
+slot_size_around_mouse_factor = 0
+items_flea_market_update_interval_mins = 0
+thread_prediction_sleep_interval_secs = 0
+overlay_update_interval_msecs = 0
+label_y_offset = 0
+key_manual_predict = ""
+max_items_to_predict = 0
+predictions_threshold = 0
+window_title_tarkov = ""
+font_label_item_size = 0
+font_label_manual_item_size = 0
+overlay_border_size = 0
+
+update_json_variables(config_file)
+
+# initializing other variables
 labels_visible = True
 item_images_updated = False
 predictions_updated = False
@@ -685,6 +781,7 @@ sift = cv2.SIFT_create()
 bf = cv2.BFMatcher()
 window_scale_factor = 1
 last_api_update = 0
+nr_valid_predictions = 0
 
 # get tarkov window
 print("Looking for the EFT window...")
@@ -695,9 +792,8 @@ window_tarkov_size = window_tarkov.size
 window_scale_factor = window_tarkov_size[1] / 1080.0
 slot_size = (int) (64 * window_scale_factor) # in pixels, for FHD resolution
 
-font_label_item = ("helvetica", 10)
-font_label_manual_item = ("helvetica", 16)
-overlay_border_size = 5
+font_label_item = ("helvetica", font_label_item_size)
+font_label_manual_item = ("helvetica", font_label_manual_item_size)
 
 # get needed data
 print("Load item information...")
@@ -749,6 +845,8 @@ button1 = tk.Button(root, text='Update predictions', fg='blue', command=update_p
 button1.pack()
 button2 = tk.Button(root, text='show/hide labels', fg='blue', command=show_hide_labels)
 button2.pack()
+button3 = tk.Button(root, text='read JSON file', fg='blue', command=update_json_variables)
+button3.pack()
 labels_visible = True
 
 # run the update process
