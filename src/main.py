@@ -418,10 +418,12 @@ def get_predictions_from_inventory(inventory):
     # TODO: can return be removed?
     # return predictions_df
 
-def place_label(text, x, y, index, font_color='white', verbose=False):
+def place_label(text, x, y, index, font_color='white', font=None, verbose=False):
     global root,font_label_item
 
-    label = tk.Label(root, text=text, font=font_label_item, fg=font_color, bg='black')
+    if font is None:
+        font = font_label_item
+    label = tk.Label(root, text=text, font=font, fg=font_color, bg='black')
     label.place(x=x, y=y+20, anchor = 'nw')
     
     # remove old label
