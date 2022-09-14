@@ -1,0 +1,50 @@
+{
+    "slot_locations_min_x": 1000,
+    "slot_locations_min_y": 100,
+    "slot_locations_max_x": 2900,
+    "slot_locations_max_y": 1300,
+    "slot_locations_threshold": 0.6,
+    "slot_locations_min_distance": 60,
+
+    "tax_t_i": 0.05,
+    "tax_t_r": 0.1,
+    "tax_quantity": 1,
+    "tax_quantity_factor": 1,
+
+    "fast_nr_corners": 100,
+    "fast_threshold_step": 2,
+    "fast_empty_slot_threshold_factor": 0.2,
+    "fast_fir_factor": 0.7,
+
+    "fast_all_item_nr_corners": 110,
+    "fast_all_item_nr_selected_corners": 100,
+    "fast_all_item_auto_threshold": false,
+
+    "fast_predict_improved_nr_corners": 100,
+    "fast_predict_improved_nr_selected_corners": 30,
+    "fast_predict_nr_corners": 50,
+    "fast_predict_nr_selected_corners": 10,
+
+    "predict_max_nr_slots": 6,
+    "predict_min_nr_matched_features": 5,
+
+    "slot_size_around_mouse_factor": 1.2,
+
+    "items_flea_market_update_interval_mins": 10,
+    "thread_prediction_sleep_interval_secs": 1,
+    "overlay_update_interval_msecs": 200,
+    
+    "label_y_offset": 20,
+
+    "key_manual_predict": "m",
+
+    "max_itmes_to_predict": 300,
+    "predictions_threshold": 300,
+
+    "window_title_tarkov": "EscapeFromTarkov",
+
+    "font_label_item_size": 10,
+    "font_label_manual_item_size": 16,
+
+    "overlay_border_size": 5
+}
