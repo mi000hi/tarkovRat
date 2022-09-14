@@ -373,7 +373,7 @@ def threaded_prediction(items, verbose=False):
             now = time.time()
             if now - last_api_update > 10 * 60:
                 print("Updating the API data.")
-                all_items_df = update_items_df(getAllItemsPrices())
+                update_items_df(getAllItemsPrices())
                 last_api_update = now
             time.sleep(1)
             if verbose:
