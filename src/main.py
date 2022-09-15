@@ -136,6 +136,8 @@ def tax(itemindex, price_rubels):
 
     t_i = tax_t_i
     t_r = tax_t_r
+    p_o_exponent = 1
+    p_r_exponent = 1
     baseprice = all_items_df.loc[itemindex, 'basePrice']
     quantity = tax_quantity
     quantity_factor = tax_quantity_factor
@@ -143,8 +145,12 @@ def tax(itemindex, price_rubels):
     if v_o == 0:
         return 0
     v_r = price_rubels # value of requirements
-    p_o = np.log10(v_o / v_r)
-    p_r = np.log10(v_r / v_o)
+    if v_r < v_o:
+        p_o_exponent = 1.08
+    p_o = np.log10(v_o / v_r)**p_o_exponent
+    if v_r >= v_o:
+        p_r_exponent = 1.08
+    p_r = np.log10(v_r / v_o)**p_r_exponent
 
     tax = v_o * t_i * (4**p_o) * quantity_factor + v_r * t_r * (4**p_r) * quantity_factor
     return tax
