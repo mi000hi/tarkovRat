@@ -625,6 +625,7 @@ def update_predictions():
 
 def show_hide_labels():
     global price_labels, labels_visible
+    global button2
 
     if labels_visible:
         for i in range(len(price_labels)):
@@ -632,9 +633,11 @@ def show_hide_labels():
                 price_labels[i].destroy()
                 price_labels[i] = None
         labels_visible = False
+        button2['text'] = "show labels"
     else:
         add_price_labels()
         labels_visible = True
+        button2['text'] = "hide labels"
 
 def items_dict_to_df(all_items):
     all_items_df = pd.DataFrame(columns=['name', 'id', 'width', 'height', 'icon_width', 'icon_height', 'features', 'fleaMarket', 'flea_avg48', 'flea_ch48percent', 'prapor', 'therapist', 'fence', 'skier', 'peacekeeper', 'mechanic', 'ragman', 'jaeger', 'basePrice'], index=range(len(all_items)))
@@ -902,7 +905,12 @@ my_frame.place(x=overlay_border_size,y=overlay_border_size)
 # add a button
 button1 = tk.Button(root, text='Update predictions', fg='blue', command=update_predictions)
 button1.grid(row=0,column=0)
-button2 = tk.Button(root, text='show/hide labels', fg='blue', command=show_hide_labels)
+button2_text = ''
+if labels_visible:
+    button2_text = 'hide labels'
+else:
+    button2_text = 'show labels'
+button2 = tk.Button(root, text=button2_text, fg='blue', command=show_hide_labels)
 button2.grid(row=0,column=1)
 button3 = tk.Button(root, text='read JSON file', fg='blue', command=update_json_variables)
 button3.grid(row=0,column=2)
