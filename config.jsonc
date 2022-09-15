@@ -46,5 +46,6 @@
     "font_label_item_size": 10,
     "font_label_manual_item_size": 16,
 
-    "overlay_border_size": 5
+    "overlay_border_size": 1,
+    "overlay_transparent_color": "#fffffe"
 }

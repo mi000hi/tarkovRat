@@ -441,10 +441,11 @@ def get_predictions_from_inventory(inventory):
 def place_label(text, x, y, index, font_color='white', font=None, anchor='nw', verbose=False):
     global root,font_label_item
     global label_y_offset
+    global overlay_transparent_color
 
     if font is None:
         font = font_label_item
-    label = tk.Label(root, text=text, font=font, fg=font_color, bg='black')
+    label = tk.Label(root, text=text, font=font, fg=font_color, bg=overlay_transparent_color)
     label.place(x=x, y=y+label_y_offset, anchor=anchor)
 
     # remove old label
@@ -459,6 +460,8 @@ def place_label(text, x, y, index, font_color='white', font=None, anchor='nw', v
         price_labels.append(label)
 
 def create_overlay():
+    global overlay_transparent_color
+    
     root = tk.Tk()
     root.title("this is not a virus. be a chad")
     root.geometry("%dx%d+%d+%d" % (window_width,window_height,x_window,y_window))
@@ -467,7 +470,7 @@ def create_overlay():
     root.configure(bg='red')
 
     # make color black transparent
-    root.wm_attributes('-transparentcolor', 'black')
+    root.wm_attributes('-transparentcolor', overlay_transparent_color)
     return root
 
 def update_price_labels():
@@ -667,7 +670,7 @@ def getAllItemsPrices():
 
 
 def update_json_variables(filename):
-    global slot_locations_min_x,slot_locations_min_y,slot_locations_max_x,slot_locations_max_y,slot_locations_threshold,slot_locations_min_distance,tax_t_i,tax_t_r,tax_quantity,tax_quantity_factor,fast_nr_corners,fast_threshold_step,fast_empty_slot_threshold_factor,fast_fir_factor,fast_all_item_nr_corners,fast_all_item_nr_selected_corners,fast_all_item_auto_threshold,fast_predict_improved_nr_corners,fast_predict_improved_nr_selected_corners,fast_predict_nr_corners,fast_predict_nr_selected_corners,predict_max_nr_slots,predict_min_nr_matched_features,slot_size_around_mouse_factor,items_flea_market_update_interval_mins,thread_prediction_sleep_interval_secs,overlay_update_interval_msecs,label_y_offset,key_manual_predict,max_items_to_predict,predictions_threshold,window_title_tarkov,font_label_item_size,font_label_manual_item_size,overlay_border_size
+    global slot_locations_min_x,slot_locations_min_y,slot_locations_max_x,slot_locations_max_y,slot_locations_threshold,slot_locations_min_distance,tax_t_i,tax_t_r,tax_quantity,tax_quantity_factor,fast_nr_corners,fast_threshold_step,fast_empty_slot_threshold_factor,fast_fir_factor,fast_all_item_nr_corners,fast_all_item_nr_selected_corners,fast_all_item_auto_threshold,fast_predict_improved_nr_corners,fast_predict_improved_nr_selected_corners,fast_predict_nr_corners,fast_predict_nr_selected_corners,predict_max_nr_slots,predict_min_nr_matched_features,slot_size_around_mouse_factor,items_flea_market_update_interval_mins,thread_prediction_sleep_interval_secs,overlay_update_interval_msecs,label_y_offset,key_manual_predict,max_items_to_predict,predictions_threshold,window_title_tarkov,font_label_item_size,font_label_manual_item_size,overlay_border_size,overlay_transparent_color
 
     config = open(filename)
     data = json.load(config)
@@ -708,6 +711,7 @@ def update_json_variables(filename):
     font_label_item_size = data_list[32][1]
     font_label_manual_item_size = data_list[33][1]
     overlay_border_size = data_list[34][1]
+    overlay_transparent_color = data_list[35][1]
 
     config.close()
 
@@ -778,6 +782,7 @@ window_title_tarkov = ""
 font_label_item_size = 0
 font_label_manual_item_size = 0
 overlay_border_size = 0
+overlay_transparent_color = ""
 
 update_json_variables(config_file)
 
@@ -847,7 +852,7 @@ print("Create the overlay...")
 root = create_overlay()
 
 # create a transparent frame to make a border
-my_frame = tk.Frame(root, width=window_width-2*overlay_border_size, height=window_height-2*overlay_border_size, bg='black')
+my_frame = tk.Frame(root, width=window_width-2*overlay_border_size, height=window_height-2*overlay_border_size, bg=overlay_transparent_color)
 my_frame.place(x=overlay_border_size,y=overlay_border_size)
 
 # add a button
