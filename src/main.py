@@ -901,12 +901,12 @@ my_frame.place(x=overlay_border_size,y=overlay_border_size)
 
 # add a button
 button1 = tk.Button(root, text='Update predictions', fg='blue', command=update_predictions)
-button1.pack()
+button1.grid(row=0,column=0)
 button2 = tk.Button(root, text='show/hide labels', fg='blue', command=show_hide_labels)
-button2.pack()
+button2.grid(row=0,column=1)
 button3 = tk.Button(root, text='read JSON file', fg='blue', command=update_json_variables)
-button3.pack()
-labels_visible = True
+button3.grid(row=0,column=2)
+labels_visible = False
 
 # run the update process
 print("Start updating the overlay... -- Use ESCAPE to kill the program")
