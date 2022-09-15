@@ -461,7 +461,7 @@ def place_label(text, x, y, index, font_color='white', font=None, anchor='nw', v
 
 def create_overlay():
     global overlay_transparent_color
-    
+
     root = tk.Tk()
     root.title("this is not a virus. be a chad")
     root.geometry("%dx%d+%d+%d" % (window_width,window_height,x_window,y_window))
@@ -538,6 +538,9 @@ def add_price_labels():
     global nr_valid_predictions, predictions_df, price_labels, all_items_df
     global predictions_threshold
 
+    prices = []
+    traders = []
+
     for i in range(nr_valid_predictions):
         prediction = predictions_df.loc[i]
         prediction_index = prediction[2]
@@ -555,8 +558,17 @@ def add_price_labels():
         # find prices for predicted item
         price_max,trader = get_price_per_slot(prediction_index)
 
-        # format price to string
-        text = format_price_for_label(prediction_index, price_max, trader)
+        prices.append(price_max)
+        traders.append(trader)
+
+    # find lowest priced items
+    prices_df = pd.DataFrame(prices)
+    lowest_prices = prices_df.nlowest(5)
+    lowest_prices_list = lowest_prices.values.tolist()
+
+    for i in range(nr_valid_predictions):
+
+
 
         place_label(text, x, y, i)
 
