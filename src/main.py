@@ -529,7 +529,7 @@ def get_price_per_slot(item_index):
     return price_max, trader
 
 def format_price_for_label(prediction_index, price_max, trader):
-    global all_items_df
+    global all_items_df,overlay_label_show_trader
 
     price = (int) (price_max/1000)
     price_string = str(price) + 'k'
@@ -539,7 +539,9 @@ def format_price_for_label(prediction_index, price_max, trader):
     name = all_items_df.loc[prediction_index][0]
 
     # create the new label
-    text = name + '\n' + price_string + '\n' + trader
+    text = name + '\n' + price_string
+    if overlay_label_show_trader:
+        text = text + '\n' + trader
 
     return text
 
@@ -704,7 +706,7 @@ def getAllItemsPrices():
 
 def update_json_variables(filename):
     global slot_locations_min_x,slot_locations_min_y,slot_locations_max_x,slot_locations_max_y,slot_locations_threshold,slot_locations_min_distance,tax_t_i,tax_t_r,tax_quantity,tax_quantity_factor,fast_nr_corners,fast_threshold_step,fast_empty_slot_threshold_factor,fast_fir_factor,fast_all_item_nr_corners,fast_all_item_nr_selected_corners,fast_all_item_auto_threshold,fast_predict_improved_nr_corners,fast_predict_improved_nr_selected_corners,fast_predict_nr_corners,fast_predict_nr_selected_corners,predict_max_nr_slots,predict_min_nr_matched_features,slot_size_around_mouse_factor,items_flea_market_update_interval_mins,thread_prediction_sleep_interval_secs,overlay_update_interval_msecs,label_y_offset,key_manual_predict,max_items_to_predict,predictions_threshold,window_title_tarkov,font_label_item_size,font_label_manual_item_size,overlay_border_size,overlay_transparent_color
-    global overlay_nr_smallest_prices,overlay_label_cheap_items_color,currency_dollar_to_rubles_factor
+    global overlay_nr_smallest_prices,overlay_label_cheap_items_color,currency_dollar_to_rubles_factor,overlay_label_show_trader
 
     config = open(filename)
     data = json.load(config)
@@ -748,7 +750,8 @@ def update_json_variables(filename):
     overlay_transparent_color = data_list[35][1]
     overlay_nr_smallest_prices = data_list[36][1]
     overlay_label_cheap_items_color = data_list[37][1]
-    currency_dollar_to_rubles_factor = data_list[38][1]
+    overlay_label_show_trader = data_list[38][1]
+    currency_dollar_to_rubles_factor = data_list[39][1]
 
     config.close()
 
@@ -822,6 +825,7 @@ overlay_border_size = 0
 overlay_transparent_color = ""
 overlay_nr_smallest_prices = 0
 overlay_label_cheap_items_color = ""
+overlay_label_show_trader = False
 currency_dollar_to_rubles_factor = 0
 
 update_json_variables(config_file)
