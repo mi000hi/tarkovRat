@@ -536,10 +536,11 @@ def format_price_for_label(prediction_index, price_max, trader):
 
 def add_price_labels():
     global nr_valid_predictions, predictions_df, price_labels, all_items_df
-    global predictions_threshold
+    global predictions_threshold,overlay_nr_smallest_prices,overlay_label_cheap_items_color
 
     prices = []
     traders = []
+    predictions = []
 
     for i in range(nr_valid_predictions):
         prediction = predictions_df.loc[i]
@@ -558,19 +559,22 @@ def add_price_labels():
         # find prices for predicted item
         price_max,trader = get_price_per_slot(prediction_index)
 
+        predictions.append(prediction_index)
         prices.append(price_max)
         traders.append(trader)
 
     # find lowest priced items
     prices_df = pd.DataFrame(prices)
-    lowest_prices = prices_df.nlowest(5)
-    lowest_prices_list = lowest_prices.values.tolist()
+    lowest_prices_threshold = max(prices_df[0].nsmallest(overlay_nr_smallest_prices))
 
     for i in range(nr_valid_predictions):
+        prediction = predictions_df.loc[i]
+        prediction_index = prediction[2]
 
+        text = format_price_for_label(predictions[i], prices[i], traders[i])
 
-
-        place_label(text, x, y, i)
+        if prices[i] <= lowest_prices_threshold:
+            place_label(text, x, y, i, color=overlay_label_cheap_items_color)
 
     # remove other old labels
     for i in range(nr_valid_predictions, len(price_labels)):
@@ -683,6 +687,7 @@ def getAllItemsPrices():
 
 def update_json_variables(filename):
     global slot_locations_min_x,slot_locations_min_y,slot_locations_max_x,slot_locations_max_y,slot_locations_threshold,slot_locations_min_distance,tax_t_i,tax_t_r,tax_quantity,tax_quantity_factor,fast_nr_corners,fast_threshold_step,fast_empty_slot_threshold_factor,fast_fir_factor,fast_all_item_nr_corners,fast_all_item_nr_selected_corners,fast_all_item_auto_threshold,fast_predict_improved_nr_corners,fast_predict_improved_nr_selected_corners,fast_predict_nr_corners,fast_predict_nr_selected_corners,predict_max_nr_slots,predict_min_nr_matched_features,slot_size_around_mouse_factor,items_flea_market_update_interval_mins,thread_prediction_sleep_interval_secs,overlay_update_interval_msecs,label_y_offset,key_manual_predict,max_items_to_predict,predictions_threshold,window_title_tarkov,font_label_item_size,font_label_manual_item_size,overlay_border_size,overlay_transparent_color
+    global overlay_nr_smallest_prices,overlay_label_cheap_items_color
 
     config = open(filename)
     data = json.load(config)
@@ -724,6 +729,8 @@ def update_json_variables(filename):
     font_label_manual_item_size = data_list[33][1]
     overlay_border_size = data_list[34][1]
     overlay_transparent_color = data_list[35][1]
+    overlay_nr_smallest_prices = data_list[36][1]
+    overlay_label_cheap_items_color = data_list[37][1]
 
     config.close()
 
@@ -795,6 +802,8 @@ font_label_item_size = 0
 font_label_manual_item_size = 0
 overlay_border_size = 0
 overlay_transparent_color = ""
+overlay_nr_smallest_prices = 0
+overlay_label_cheap_items_color = ""
 
 update_json_variables(config_file)
 
