@@ -16,16 +16,16 @@
     "fast_empty_slot_threshold_factor": 0.2,
     "fast_fir_factor": 0.7,
 
-    "fast_all_item_nr_corners": 110,
-    "fast_all_item_nr_selected_corners": 100,
-    "fast_all_item_auto_threshold": false,
+    "fast_all_item_nr_corners": 80,
+    "fast_all_item_nr_selected_corners": 70,
+    "fast_all_item_auto_threshold": true,
 
     "fast_predict_improved_nr_corners": 100,
     "fast_predict_improved_nr_selected_corners": 30,
-    "fast_predict_nr_corners": 50,
-    "fast_predict_nr_selected_corners": 10,
+    "fast_predict_nr_corners": 80,
+    "fast_predict_nr_selected_corners": 20,
 
-    "predict_max_nr_slots": 6,
+    "predict_max_nr_slots": 4,
     "predict_min_nr_matched_features": 5,
 
     "slot_size_around_mouse_factor": 1.2,
@@ -33,7 +33,7 @@
     "items_flea_market_update_interval_mins": 10,
     "thread_prediction_sleep_interval_secs": 1,
     "overlay_update_interval_msecs": 200,
-    
+
     "label_y_offset": 20,
 
     "key_manual_predict": "m",
