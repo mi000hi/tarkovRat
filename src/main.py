@@ -261,6 +261,9 @@ def predict_icon(img, improved=False, verbose=False):
         # predict using template matching
         matches = []
         for icon in icons:
+            if icon is None or len(icon) == 0:
+                matches.append(0)
+                continue
             min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(cv2.matchTemplate(img, icon, cv2.TM_CCOEFF_NORMED))
             matches.append(max_val)
         return np.argmax(matches),1/max(matches)
