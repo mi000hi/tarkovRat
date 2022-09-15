@@ -50,5 +50,6 @@
     "overlay_transparent_color": "#fffffe",
 
     "overlay_nr_smallest_prices": 5,
-    "overlay_label_cheap_items_color": "#ed6f02"
+    "overlay_label_cheap_items_color": "#ed6f02",
+    "currency_dollar_to_rubles_factor": 114
 }
