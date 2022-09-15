@@ -362,7 +362,8 @@ def predict_item_under_mouse():
     # format price to string
     text = format_price_for_label(prediction, price_max, trader)
 
-    place_label(text, mouse_pos[0], mouse_pos[1], -1, font_color='red', font=font_label_manual_item, anchor='center')
+    if labels_visible:
+        place_label(text, mouse_pos[0], mouse_pos[1], -1, font_color='red', font=font_label_manual_item, anchor='center')
 
 def predict_current_inventory(predictions_df):
     global root
@@ -480,7 +481,7 @@ def create_overlay():
     return root
 
 def update_price_labels():
-    remove_price_labels()
+    remove_price_labels(remove_manual_label_too=False)
     add_price_labels()
 
 def get_price_per_slot(item_index):
@@ -584,14 +585,22 @@ def add_price_labels():
         if prices[i] <= lowest_prices_threshold:
             place_label(text, x, y, i, color=overlay_label_cheap_items_color)
 
-    # remove other old labels
-    for i in range(nr_valid_predictions, len(price_labels)):
+    # remove other old labels exept manual label
+    for i in range(nr_valid_predictions, len(price_labels)-1):
         if price_labels[i] is None:
             break
         price_labels[i].destroy()
 
-def remove_price_labels():
-    for label in price_labels:
+def remove_price_labels(remove_manual_label_too=True):
+    global price_labels
+
+    for i in range(len(price_labels)-1-1):
+        label = price_labels[i]
+        if not label is None:
+            label.destroy()
+
+    if remove_manual_label_too:
+        label = price_labels[-1]
         if not label is None:
             label.destroy()
 
