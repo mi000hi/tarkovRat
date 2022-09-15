@@ -445,14 +445,17 @@ def get_predictions_from_inventory(inventory):
     # TODO: can return be removed?
     # return predictions_df
 
-def place_label(text, x, y, index, font_color='white', font=None, anchor='nw', verbose=False):
+def place_label(text, x, y, index, font_color='white', font=None, anchor='nw', color=None, verbose=False):
     global root,font_label_item
     global label_y_offset
-    global overlay_transparent_color
+    global overlay_transparent_color,price_labels
+
+    if color is None:
+        color = font_color
 
     if font is None:
         font = font_label_item
-    label = tk.Label(root, text=text, font=font, fg=font_color, bg=overlay_transparent_color)
+    label = tk.Label(root, text=text, font=font, fg=color, bg=overlay_transparent_color)
     label.place(x=x, y=y+label_y_offset, anchor=anchor)
 
     # remove old label
@@ -481,7 +484,7 @@ def create_overlay():
     return root
 
 def update_price_labels():
-    remove_price_labels(remove_manual_label_too=False)
+    #remove_price_labels(remove_manual_label_too=False)
     add_price_labels()
 
 def get_price_per_slot(item_index):
@@ -550,6 +553,7 @@ def add_price_labels():
     global predictions_threshold,overlay_nr_smallest_prices,overlay_label_cheap_items_color
 
     prices = []
+    prices_over_1k = []
     traders = []
     predictions = []
 
@@ -558,14 +562,13 @@ def add_price_labels():
         prediction_index = prediction[2]
         prediction_distance = prediction[3]
         if prediction_index == -1 or prediction_distance > predictions_threshold:
-            if not price_labels[i] is None:
-                price_labels[i].destroy()
-                price_labels[i] = None
+        #    if not price_labels[i] is None:
+        #        price_labels[i].destroy()
+        #        price_labels[i] = None
+            predictions.append(-1)
+            prices.append(-1)
+            traders.append(-1)
             continue
-
-        # label location
-        x = prediction[0]
-        y = prediction[1]
 
         # find prices for predicted item
         price_max,trader = get_price_per_slot(prediction_index)
@@ -574,23 +577,34 @@ def add_price_labels():
         prices.append(price_max)
         traders.append(trader)
 
+        if price_max > 1000:
+            prices_over_1k.append(price_max)
+
     # find lowest priced items
-    prices_df = pd.DataFrame(prices)
+    prices_df = pd.DataFrame(prices_over_1k)
     lowest_prices_threshold = max(prices_df[0].nsmallest(overlay_nr_smallest_prices))
 
     for i in range(nr_valid_predictions):
+        if predictions[i] == -1:
+            continue
+
         prediction = predictions_df.loc[i]
-        prediction_index = prediction[2]
+
+        # label location
+        x = prediction[0]
+        y = prediction[1]
 
         text = format_price_for_label(predictions[i], prices[i], traders[i])
 
         if prices[i] <= lowest_prices_threshold:
             place_label(text, x, y, i, color=overlay_label_cheap_items_color)
+        else:
+            place_label(text, x, y, i)
 
-    # remove other old labels exept manual label
-    for i in range(nr_valid_predictions, len(price_labels)-1):
+    # remove other old labels except manual label
+    for i in range(len(predictions), len(price_labels)-1):
         if price_labels[i] is None:
-            break
+            continue
         price_labels[i].destroy()
 
 def remove_price_labels(remove_manual_label_too=True):
@@ -834,7 +848,7 @@ currency_dollar_to_rubles_factor = 0
 update_json_variables(config_file)
 
 # initializing other variables
-labels_visible = True
+labels_visible = False
 item_images_updated = False
 predictions_updated = False
 STOP_THREADS = False
@@ -914,7 +928,6 @@ button2 = tk.Button(root, text=button2_text, fg='blue', command=show_hide_labels
 button2.grid(row=0,column=1)
 button3 = tk.Button(root, text='read JSON file', fg='blue', command=update_json_variables)
 button3.grid(row=0,column=2)
-labels_visible = False
 
 # run the update process
 print("Start updating the overlay... -- Use ESCAPE to kill the program")
