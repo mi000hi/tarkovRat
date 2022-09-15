@@ -258,7 +258,14 @@ def predict_icon(img, improved=False, verbose=False):
     distances_local = []
     kp,des = None,None
     if improved:
-        kp,des = run_sift(img, nr_corners=fast_predict_improved_nr_corners, nr_selected_corners=fast_predict_improved_nr_selected_corners)
+        # predict using template matching
+        matches = []
+        for icon in icons:
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(cv2.matchTemplate(img, icon, cv2.TM_CCOEFF_NORMED))
+            matches.append(max_val)
+        return np.argmax(matches),1/max(matches)
+
+        # kp,des = run_sift(img, nr_corners=fast_predict_improved_nr_corners, nr_selected_corners=fast_predict_improved_nr_selected_corners)
     else:
         kp,des = run_sift(img, nr_corners=fast_predict_nr_corners, nr_selected_corners=fast_predict_nr_selected_corners)
 
