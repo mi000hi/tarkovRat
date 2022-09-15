@@ -484,13 +484,15 @@ def update_price_labels():
     add_price_labels()
 
 def get_price_per_slot(item_index):
-    global all_items_df
+    global all_items_df, currency_dollar_to_rubles_factor
 
     traders = {0:'prapor', 1:'therapist', 2:'fence', 3:'skier', 4:'peacekeeper', 5:'mechanic', 6:'ragman', 7:'jaeger'}
     price_flea = all_items_df.loc[item_index, 'fleaMarket']
-    price_traders = all_items_df.loc[item_index, 'prapor':'jaeger']
+    price_traders = all_items_df.loc[item_index, 'prapor':'jaeger'].copy()
 
-    # TODO: check for currency
+    #change all currency to rubels
+    price_peacekeeper = price_traders['peacekeeper']
+    price_traders['peacekeeper'] = price_peacekeeper * currency_dollar_to_rubles_factor
 
     # find best trader
     price_traders_max = np.nanmax(price_traders.values.tolist() + [0])
@@ -693,7 +695,7 @@ def getAllItemsPrices():
 
 def update_json_variables(filename):
     global slot_locations_min_x,slot_locations_min_y,slot_locations_max_x,slot_locations_max_y,slot_locations_threshold,slot_locations_min_distance,tax_t_i,tax_t_r,tax_quantity,tax_quantity_factor,fast_nr_corners,fast_threshold_step,fast_empty_slot_threshold_factor,fast_fir_factor,fast_all_item_nr_corners,fast_all_item_nr_selected_corners,fast_all_item_auto_threshold,fast_predict_improved_nr_corners,fast_predict_improved_nr_selected_corners,fast_predict_nr_corners,fast_predict_nr_selected_corners,predict_max_nr_slots,predict_min_nr_matched_features,slot_size_around_mouse_factor,items_flea_market_update_interval_mins,thread_prediction_sleep_interval_secs,overlay_update_interval_msecs,label_y_offset,key_manual_predict,max_items_to_predict,predictions_threshold,window_title_tarkov,font_label_item_size,font_label_manual_item_size,overlay_border_size,overlay_transparent_color
-    global overlay_nr_smallest_prices,overlay_label_cheap_items_color
+    global overlay_nr_smallest_prices,overlay_label_cheap_items_color,currency_dollar_to_rubles_factor
 
     config = open(filename)
     data = json.load(config)
@@ -737,6 +739,7 @@ def update_json_variables(filename):
     overlay_transparent_color = data_list[35][1]
     overlay_nr_smallest_prices = data_list[36][1]
     overlay_label_cheap_items_color = data_list[37][1]
+    currency_dollar_to_rubles_factor = data_list[38][1]
 
     config.close()
 
@@ -810,6 +813,7 @@ overlay_border_size = 0
 overlay_transparent_color = ""
 overlay_nr_smallest_prices = 0
 overlay_label_cheap_items_color = ""
+currency_dollar_to_rubles_factor = 0
 
 update_json_variables(config_file)
 
