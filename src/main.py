@@ -109,6 +109,7 @@ def get_item_images_from_inventory(inventory):
     global item_images, max_items_to_predict, item_images_updated
     global slot_locations, nr_valid_predictions, slot_size
 
+    # TODO: refactor nr_valid_predictions variable
     for i in range(nr_valid_predictions):
         s = slot_locations[i]
         item_images[i] = inventory[s[1]:s[1]+slot_size, s[0]:s[0]+slot_size]
@@ -254,7 +255,7 @@ def create_all_descriptors():
 
     return descriptors, descriptors_values
 
-def predict_icon(img, improved=False, verbose=False):
+def predict_icon(img, improved=False, matching_item=None, verbose=False):
     global icons, bf, descriptors, descriptors_values
     global fast_predict_improved_nr_corners,fast_predict_improved_nr_selected_corners
     global fast_predict_nr_corners,fast_predict_nr_selected_corners
@@ -280,6 +281,35 @@ def predict_icon(img, improved=False, verbose=False):
 
     if verbose:
         print(f"nr kp: {len(kp)}")
+
+    if not matching_item is None:
+        distances_local = []
+        max_slots = min(predict_max_nr_slots, len(descriptors[matching_item])) # max slot size of considered items
+        for j in range(max_slots):
+            # no kp / des found for specific slot
+            if descriptors_values[descriptors[matching_item][j]] is None:
+                distances_local.append(999999)
+                continue
+
+            matches = bf.match(des,descriptors_values[descriptors[matching_item][j]])
+            matches = sorted(matches, key = lambda x:x.distance)
+
+            # if too few features, abort
+            if len(matches) < predict_min_nr_matched_features:
+                distances_local.append(999999)
+                continue
+
+            # sum up match distances
+            distance = 0.0
+            for match in matches:
+                distance += match.distance
+            distance = distance/len(matches)
+
+            distances_local.append(distance)
+
+        # return distance of best matching slot
+        min_distance = min(distances_local)
+        return matching_item,min_distance
 
     for i in range(len(icons)):
         # no kp / des found
@@ -390,6 +420,7 @@ def threaded_prediction(items, verbose=False):
     global predictions, distances, prediction_threshold
     global last_api_update, all_items_df
     global items_flea_market_update_interval_mins,thread_prediction_sleep_interval_secs
+    global predictions_threshold
 
     while True:
         global STOP_THREADS
@@ -410,6 +441,13 @@ def threaded_prediction(items, verbose=False):
             print(f"we have {nr_valid_predictions} new predictions")
             for i in range(nr_valid_predictions):
                 item = item_images[i]
+
+                # check if item has already been predicted
+                if distances[i] < predictions_threshold:
+                    # check if previous prediction is the same item
+                    p,d = predict_icon(item, matching_item=predictions[i])
+                    if d < predictions_threshold:
+                        continue
 
                 # update prediction information
                 p,d = predict_icon(item)
@@ -485,7 +523,7 @@ def create_overlay():
     return root
 
 def update_price_labels():
-    #remove_price_labels(remove_manual_label_too=False)
+    remove_price_labels(remove_manual_label_too=False)
     add_price_labels()
 
 def get_price_per_slot(item_index):
@@ -558,49 +596,49 @@ def add_price_labels():
     traders = []
     predictions = []
 
-    for i in range(nr_valid_predictions):
-        prediction = predictions_df.loc[i]
-        prediction_index = prediction[2]
-        prediction_distance = prediction[3]
-        if prediction_index == -1 or prediction_distance > predictions_threshold:
-        #    if not price_labels[i] is None:
-        #        price_labels[i].destroy()
-        #        price_labels[i] = None
-            predictions.append(-1)
-            prices.append(-1)
-            traders.append(-1)
-            continue
+    if nr_valid_predictions > 0:
+        for i in range(nr_valid_predictions):
+            prediction = predictions_df.loc[i]
+            prediction_index = prediction[2]
+            prediction_distance = prediction[3]
+            if prediction_index == -1 or prediction_distance > predictions_threshold: #    if not price_labels[i] is None:
+            #        price_labels[i].destroy()
+            #        price_labels[i] = None
+                predictions.append(-1)
+                prices.append(-1)
+                traders.append(-1)
+                continue
 
-        # find prices for predicted item
-        price_max,trader = get_price_per_slot(prediction_index)
+            # find prices for predicted item
+            price_max,trader = get_price_per_slot(prediction_index)
 
-        predictions.append(prediction_index)
-        prices.append(price_max)
-        traders.append(trader)
+            predictions.append(prediction_index)
+            prices.append(price_max)
+            traders.append(trader)
 
-        if price_max > 1000:
-            prices_over_1k.append(price_max)
+            if price_max > 1000:
+                prices_over_1k.append(price_max)
 
-    # find lowest priced items
-    prices_df = pd.DataFrame(prices_over_1k)
-    lowest_prices_threshold = max(prices_df[0].nsmallest(overlay_nr_smallest_prices))
+        # find lowest priced items
+        prices_df = pd.DataFrame(prices_over_1k)
+        lowest_prices_threshold = max(prices_df[0].nsmallest(overlay_nr_smallest_prices))
 
-    for i in range(nr_valid_predictions):
-        if predictions[i] == -1:
-            continue
+        for i in range(nr_valid_predictions):
+            if predictions[i] == -1:
+                continue
 
-        prediction = predictions_df.loc[i]
+            prediction = predictions_df.loc[i]
 
-        # label location
-        x = prediction[0]
-        y = prediction[1]
+            # label location
+            x = prediction[0]
+            y = prediction[1]
 
-        text = format_price_for_label(predictions[i], prices[i], traders[i])
+            text = format_price_for_label(predictions[i], prices[i], traders[i])
 
-        if prices[i] <= lowest_prices_threshold:
-            place_label(text, x, y, i, color=overlay_label_cheap_items_color)
-        else:
-            place_label(text, x, y, i)
+            if prices[i] <= lowest_prices_threshold:
+                place_label(text, x, y, i, color=overlay_label_cheap_items_color)
+            else:
+                place_label(text, x, y, i)
 
     # remove other old labels except manual label
     for i in range(len(predictions), len(price_labels)-1):
@@ -727,11 +765,15 @@ def getAllItemsPrices():
 
 
 
-def update_json_variables(filename):
+def update_json_variables(file=None):
     global slot_locations_min_x,slot_locations_min_y,slot_locations_max_x,slot_locations_max_y,slot_locations_threshold,slot_locations_min_distance,tax_t_i,tax_t_r,tax_quantity,tax_quantity_factor,fast_nr_corners,fast_threshold_step,fast_empty_slot_threshold_factor,fast_fir_factor,fast_all_item_nr_corners,fast_all_item_nr_selected_corners,fast_all_item_auto_threshold,fast_predict_improved_nr_corners,fast_predict_improved_nr_selected_corners,fast_predict_nr_corners,fast_predict_nr_selected_corners,predict_max_nr_slots,predict_min_nr_matched_features,slot_size_around_mouse_factor,items_flea_market_update_interval_mins,thread_prediction_sleep_interval_secs,overlay_update_interval_msecs,label_y_offset,key_manual_predict,max_items_to_predict,predictions_threshold,window_title_tarkov,font_label_item_size,font_label_manual_item_size,overlay_border_size,overlay_transparent_color
     global overlay_nr_smallest_prices,overlay_label_cheap_items_color,currency_dollar_to_rubles_factor,overlay_label_show_trader
+    global key_program_quit
 
-    config = open(filename)
+    if file is None:
+        file = config_file
+
+    config = open(file)
     data = json.load(config)
     data_list = list(data.items())
 
@@ -775,6 +817,7 @@ def update_json_variables(filename):
     overlay_label_cheap_items_color = data_list[37][1]
     overlay_label_show_trader = data_list[38][1]
     currency_dollar_to_rubles_factor = data_list[39][1]
+    key_program_quit = data_list[40][1]
 
     config.close()
 
@@ -850,6 +893,7 @@ overlay_nr_smallest_prices = 0
 overlay_label_cheap_items_color = ""
 overlay_label_show_trader = False
 currency_dollar_to_rubles_factor = 0
+key_program_quit = ""
 
 update_json_variables(config_file)
 
@@ -944,7 +988,7 @@ update()
 
 # show the window and take focus
 root.focus_force()
-root.bind('<Escape>', lambda e: root.destroy())
+root.bind(key_program_quit, lambda e: root.destroy())
 root.mainloop()
 
 # stop the update thread

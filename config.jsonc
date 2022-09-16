@@ -13,7 +13,7 @@
 
     "fast_nr_corners": 100,
     "fast_threshold_step": 2,
-    "fast_empty_slot_threshold_factor": 0.2,
+    "fast_empty_slot_threshold_factor": 0.3,
     "fast_fir_factor": 0.7,
 
     "fast_all_item_nr_corners": 80,
@@ -52,6 +52,8 @@
     "overlay_nr_smallest_prices": 5,
     "overlay_label_cheap_items_color": "#ed6f02",
     "overlay_label_show_trader": true,
-    
-    "currency_dollar_to_rubles_factor": 114
+
+    "currency_dollar_to_rubles_factor": 114,
+
+    "key_program_quit": "<Escape>"
 }
