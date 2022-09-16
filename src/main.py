@@ -504,15 +504,15 @@ def get_price_per_slot(item_index):
         best_trader = traders.get(np.nanargmax(price_traders))
 
     # subtract tax from flea price
+    flea_tax = 0
     if math.isnan(price_flea):
         price_flea = 0
     else:
         flea_tax = tax(item_index, price_flea)
-        price_flea -= flea_tax
 
     # check trader or flea
-    price_max = max(price_traders_max, price_flea)
-    flea_best = np.argmax([price_traders_max, price_flea])
+    price_max = max(price_traders_max, price_flea-flea_tax)
+    flea_best = np.argmax([price_traders_max, price_flea-flea_tax])
 
     trader = best_trader
     if flea_best == 1:
