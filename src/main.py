@@ -624,11 +624,12 @@ def remove_price_labels(remove_manual_label_too=True):
 def update():
     global root,key_manual_predict
     global overlay_update_interval_msecs
+    global predictions_updated
 
     if keyboard.is_pressed(key_manual_predict):
         predict_item_under_mouse()
 
-    if labels_visible:
+    if labels_visible and predictions_updated:
         update_price_labels()
 
     # run itself again after 100 ms
@@ -905,7 +906,7 @@ thread_predict.start()
 
 # get items from screenshot
 print("Predict items on current screen...")
-predict_current_inventory(predictions_df)
+predict_current_inventory(predictions_df, True)
 
 # find overlay position
 x_window = window_tarkov_position[0]
