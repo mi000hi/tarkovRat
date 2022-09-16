@@ -365,7 +365,7 @@ def predict_item_under_mouse():
     if labels_visible:
         place_label(text, mouse_pos[0], mouse_pos[1], -1, font_color='red', font=font_label_manual_item, anchor='center')
 
-def predict_current_inventory(predictions_df):
+def predict_current_inventory(predictions_df, update_slot_locations):
     global root
 
     # hide all tkinter
@@ -382,7 +382,7 @@ def predict_current_inventory(predictions_df):
         root.deiconify()
 
     # get items from screenshot
-    get_predictions_from_inventory(screenshot)
+    get_predictions_from_inventory(screenshot, update_slot_locations)
 
 def threaded_prediction(items, verbose=False):
     global item_images_updated, nr_valid_predictions, predictions_updated
@@ -427,14 +427,15 @@ def threaded_prediction(items, verbose=False):
 
             item_images_updated = False
 
-def get_predictions_from_inventory(inventory):
+def get_predictions_from_inventory(inventory, update_slot_locations):
     global img_slot_gray
     global thread_predict
 
     # get item images
     t0 = time.time()
-    inventory_filtered = inventory_line_detection(inventory)
-    find_slot_locations(inventory_filtered, img_slot_gray)
+    if update_slot_locations:
+        inventory_filtered = inventory_line_detection(inventory)
+        find_slot_locations(inventory_filtered, img_slot_gray)
     get_item_images_from_inventory(inventory)
     t1 = time.time()
     print(f'inventory slots and images took {t1-t0} s')
@@ -635,7 +636,11 @@ def update():
 
 def update_predictions():
     global predictions_df
-    predict_current_inventory(predictions_df)
+    predict_current_inventory(predictions_df, update_slot_locations=False)
+
+def update_predictions_and_slots():
+    global predictions_df
+    predict_current_inventory(predictions_df, update_slot_locations=True)
 
 def show_hide_labels():
     global price_labels, labels_visible
@@ -928,6 +933,8 @@ button2 = tk.Button(root, text=button2_text, fg='blue', command=show_hide_labels
 button2.grid(row=0,column=1)
 button3 = tk.Button(root, text='read JSON file', fg='blue', command=update_json_variables)
 button3.grid(row=0,column=2)
+button4 = tk.Button(root, text='Update predictions and slots', fg='blue', command=update_predictions_and_slots)
+button4.grid(row=0, column=3)
 
 # run the update process
 print("Start updating the overlay... -- Use ESCAPE to kill the program")
