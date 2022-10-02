@@ -7,9 +7,6 @@ import random
 
 
 def run_sift(img, nr_corners=100, nr_selected_corners=999999, auto_threshold=True, verbose=False):
-    global sift
-    global fast_empty_slot_threshold_factor,fast_fir_factor
-
     nr_selected_corners = min(nr_selected_corners, nr_corners)
     threshold_step = 2
     threshold = -threshold_step
@@ -55,12 +52,9 @@ def run_sift(img, nr_corners=100, nr_selected_corners=999999, auto_threshold=Tru
     kp,des = sift.compute(img, kp_selected)
     return kp,des
 
-def create_all_descriptors():
-    global icons, all_items_df, slot_size
-    global fast_all_item_nr_corners,fast_all_item_nr_selected_corners,fast_all_item_auto_threshold
-
-    descriptors = []
-    descriptors_values = []
+def update_all_descriptors(all_items_df, descriptors, descriptors_values, icons, slot_size, json_data):
+    descriptors.clear()
+    descriptors_values.clear()
     descriptors_values_length = 0
     for i,icon in enumerate(icons):
         # no item icon
@@ -76,13 +70,11 @@ def create_all_descriptors():
             for y in range(h):
                 icon_slot = icon[y*slot_size:(y+1)*slot_size, x*slot_size:(x+1)*slot_size].copy()
                 # TODO: may be bad idea to not use autothreshold
-                kp,des = run_sift(icon_slot, nr_corners=fast_all_item_nr_corners, nr_selected_corners=fast_all_item_nr_selected_corners, auto_threshold=fast_all_item_auto_threshold)
+                kp,des = run_sift(icon_slot, nr_corners=json_data.get("fast_all_item_nr_corners"), nr_selected_corners=json_data.get("fast_all_item_nr_selected_corners"), auto_threshold=json_data.get("fast_all_item_auto_threshold"))
 
                 descriptors[i].append(descriptors_values_length)
                 descriptors_values.append(des)
                 descriptors_values_length += 1
-
-    return descriptors, descriptors_values
 
 def predict_icon(img, improved=False, matching_item=None, verbose=False):
     global icons, bf, descriptors, descriptors_values

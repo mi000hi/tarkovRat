@@ -44,10 +44,7 @@ def tax(itemindex, price_rubels):
     tax = v_o * t_i * (4**p_o) * quantity_factor + v_r * t_r * (4**p_r) * quantity_factor
     return tax
 
-def load_icons_from_disk(verbose=False):
-    global all_items_df
-    global path_grid_icons,filename_ending_grid_icon,window_scale_factor
-
+def load_icons_from_disk(all_items_df, path_grid_icons, filename_ending_grid_icon, slot_size, verbose=False):
     icons = []
     for index,item in all_items_df.iterrows():
         filename = path_grid_icons + item['id'] + filename_ending_grid_icon
@@ -215,26 +212,22 @@ def format_price_for_label(prediction_index, price_max, trader):
 
     return text
 
-def items_dict_to_df(all_items):
-    all_items_df = pd.DataFrame(columns=['name', 'id', 'width', 'height', 'icon_width', 'icon_height', 'features', 'fleaMarket', 'flea_avg48', 'flea_ch48percent', 'prapor', 'therapist', 'fence', 'skier', 'peacekeeper', 'mechanic', 'ragman', 'jaeger', 'basePrice'], index=range(len(all_items)))
-
+def update_items_df_from_dict(df, all_items):
     # iterate over all items
     for index in range(len(all_items)):
-        all_items_df.iloc[index]['name'] = all_items[index].get('shortName')
-        all_items_df.iloc[index]['id'] = all_items[index].get('id')
-        all_items_df.iloc[index]['width'] = all_items[index].get('width')
-        all_items_df.iloc[index]['height'] = all_items[index].get('height')
-        all_items_df.iloc[index]['flea_avg48'] = all_items[index].get('avg24hPrice')
-        all_items_df.iloc[index]['flea_ch48percent'] = all_items[index].get('changeLast48hPercent')
-        all_items_df.iloc[index]['basePrice'] = all_items[index].get('basePrice')
+        df.iloc[index]['name'] = all_items[index].get('shortName')
+        df.iloc[index]['id'] = all_items[index].get('id')
+        df.iloc[index]['width'] = all_items[index].get('width')
+        df.iloc[index]['height'] = all_items[index].get('height')
+        df.iloc[index]['flea_avg48'] = all_items[index].get('avg24hPrice')
+        df.iloc[index]['flea_ch48percent'] = all_items[index].get('changeLast48hPercent')
+        df.iloc[index]['basePrice'] = all_items[index].get('basePrice')
 
         # iterate over all traders that can buy the item
         for offer in all_items[index].get('sellFor'):
             trader = offer.get('source')
             price  = offer.get('price')
-            all_items_df.iloc[index][trader] = price
-
-    return all_items_df
+            df.iloc[index][trader] = price
 
 def update_items_df(all_items_dict):
     global all_items_df
